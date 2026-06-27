@@ -21,37 +21,24 @@ app.add_middleware(
 
 API_URL = os.getenv("API_URL", "https://extether.duckdns.org")
 API_TOKEN = os.getenv("API_TOKEN")
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # Токен твоего бота
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Инициализация бота
+# ============================================================
+#  ИНИЦИАЛИЗАЦИЯ БОТА (ПРАВИЛЬНАЯ)
+# ============================================================
 bot_app = Application.builder().token(BOT_TOKEN).build()
 
-# ============================================================
-#  ФУНКЦИИ ДЛЯ API
-# ============================================================
-async def api_request(endpoint: str, method: str = "GET", body: dict = None):
-    url = f"{API_URL}{endpoint}"
-    headers = {"Authorization": f"Bearer {API_TOKEN}"}
-    
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        if method == "GET":
-            response = await client.get(url, headers=headers)
-        elif method == "POST":
-            response = await client.post(url, headers=headers, json=body)
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported method: {method}")
-        
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
+# Регистрируем команды
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CommandHandler("help", help_command))
+bot_app.add_handler(CommandHandler("numbers", numbers_command))
 
 # ============================================================
 #  КОМАНДЫ БОТА
 # ============================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Создаём кнопки
     keyboard = [
-        [InlineKeyboardButton("📱 Арендовать номер", url="https://твой-сайт.pages.dev")],
+        [InlineKeyboardButton("📱 Арендовать номер", url="https://5bc3a350.krutoyrentnomerov.pages.dev")],
         [InlineKeyboardButton("📢 Наш телеграм канал", url="https://t.me/anonymenumberrent")],
         [InlineKeyboardButton("🆘 Тех поддержка", url="https://t.me/anonrentsupport_bot")]
     ]
@@ -68,8 +55,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("📱 Арендовать номер", url="https://твой-сайт.pages.dev")],
-        [InlineKeyboardButton("📢 Наш телеграм канал", url="https://5bc3a350.krutoyrentnomerov.pages.dev")],
+        [InlineKeyboardButton("📱 Арендовать номер", url="https://5bc3a350.krutoyrentnomerov.pages.dev")],
+        [InlineKeyboardButton("📢 Наш телеграм канал", url="https://t.me/anonymenumberrent")],
         [InlineKeyboardButton("🆘 Тех поддержка", url="https://t.me/anonrentsupport_bot")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -98,7 +85,7 @@ async def numbers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text += f"\n🔴 В аренде: {len(data['rented'])} номеров"
             
             keyboard = [
-                [InlineKeyboardButton("📱 Арендовать номер", url="https://твой-сайт.pages.dev")],
+                [InlineKeyboardButton("📱 Арендовать номер", url="https://5bc3a350.krutoyrentnomerov.pages.dev")],
                 [InlineKeyboardButton("🆘 Тех поддержка", url="https://t.me/anonrentsupport_bot")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -109,6 +96,25 @@ async def numbers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка загрузки: {str(e)}")
 
 # ============================================================
+#  ФУНКЦИИ ДЛЯ API
+# ============================================================
+async def api_request(endpoint: str, method: str = "GET", body: dict = None):
+    url = f"{API_URL}{endpoint}"
+    headers = {"Authorization": f"Bearer {API_TOKEN}"}
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        if method == "GET":
+            response = await client.get(url, headers=headers)
+        elif method == "POST":
+            response = await client.post(url, headers=headers, json=body)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported method: {method}")
+        
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return response.json()
+
+# ============================================================
 #  ВЕБХУК
 # ============================================================
 @app.post("/webhook")
@@ -117,6 +123,7 @@ async def webhook(request: Request):
     try:
         data = await request.json()
         update = Update.de_json(data, bot_app.bot)
+        # ВАЖНО: используем bot_app.process_update
         await bot_app.process_update(update)
         return {"status": "ok"}
     except Exception as e:
