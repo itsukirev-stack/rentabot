@@ -2,10 +2,9 @@ import os
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 load_dotenv()
 
@@ -24,17 +23,26 @@ API_TOKEN = os.getenv("API_TOKEN")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # ============================================================
-#  ИНИЦИАЛИЗАЦИЯ БОТА (ПРАВИЛЬНАЯ)
+#  ФУНКЦИИ ДЛЯ API (СНАЧАЛА)
 # ============================================================
-bot_app = Application.builder().token(BOT_TOKEN).build()
-
-# Регистрируем команды
-bot_app.add_handler(CommandHandler("start", start))
-bot_app.add_handler(CommandHandler("help", help_command))
-bot_app.add_handler(CommandHandler("numbers", numbers_command))
+async def api_request(endpoint: str, method: str = "GET", body: dict = None):
+    url = f"{API_URL}{endpoint}"
+    headers = {"Authorization": f"Bearer {API_TOKEN}"}
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        if method == "GET":
+            response = await client.get(url, headers=headers)
+        elif method == "POST":
+            response = await client.post(url, headers=headers, json=body)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported method: {method}")
+        
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return response.json()
 
 # ============================================================
-#  КОМАНДЫ БОТА
+#  КОМАНДЫ БОТА (ПОТОМ)
 # ============================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -96,34 +104,22 @@ async def numbers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка загрузки: {str(e)}")
 
 # ============================================================
-#  ФУНКЦИИ ДЛЯ API
+#  ИНИЦИАЛИЗАЦИЯ БОТА (ПОСЛЕ ОПРЕДЕЛЕНИЯ КОМАНД)
 # ============================================================
-async def api_request(endpoint: str, method: str = "GET", body: dict = None):
-    url = f"{API_URL}{endpoint}"
-    headers = {"Authorization": f"Bearer {API_TOKEN}"}
-    
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        if method == "GET":
-            response = await client.get(url, headers=headers)
-        elif method == "POST":
-            response = await client.post(url, headers=headers, json=body)
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported method: {method}")
-        
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
+bot_app = Application.builder().token(BOT_TOKEN).build()
+
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CommandHandler("help", help_command))
+bot_app.add_handler(CommandHandler("numbers", numbers_command))
 
 # ============================================================
 #  ВЕБХУК
 # ============================================================
 @app.post("/webhook")
 async def webhook(request: Request):
-    """Принимает обновления от Telegram"""
     try:
         data = await request.json()
         update = Update.de_json(data, bot_app.bot)
-        # ВАЖНО: используем bot_app.process_update
         await bot_app.process_update(update)
         return {"status": "ok"}
     except Exception as e:
