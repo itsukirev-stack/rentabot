@@ -46,7 +46,7 @@ async def api_request(endpoint: str, method: str = "GET", body: dict = None):
 # ============================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("📱 Арендовать номер", url="https://5bc3a350.krutoyrentnomerov.pages.dev")],
+        [InlineKeyboardButton("📱 Арендовать номер", url="https://t.me/Anonnumberrent_bot/app")],
         [InlineKeyboardButton("📢 Наш телеграм канал", url="https://t.me/anonymenumberrent")],
         [InlineKeyboardButton("🆘 Тех поддержка", url="https://t.me/anonrentsupport_bot")]
     ]
@@ -93,7 +93,7 @@ async def numbers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text += f"\n🔴 В аренде: {len(data['rented'])} номеров"
             
             keyboard = [
-                [InlineKeyboardButton("📱 Арендовать номер", url="https://t.me/Anonnumberrent_bot/app)],
+                [InlineKeyboardButton("📱 Арендовать номер", url="https://t.me/Anonnumberrent_bot/app")],
                 [InlineKeyboardButton("🆘 Тех поддержка", url="https://t.me/anonrentsupport_bot")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
