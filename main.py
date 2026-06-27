@@ -23,7 +23,7 @@ API_TOKEN = os.getenv("API_TOKEN")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # ============================================================
-#  ФУНКЦИИ ДЛЯ API (СНАЧАЛА)
+#  ФУНКЦИИ ДЛЯ API
 # ============================================================
 async def api_request(endpoint: str, method: str = "GET", body: dict = None):
     url = f"{API_URL}{endpoint}"
@@ -42,7 +42,7 @@ async def api_request(endpoint: str, method: str = "GET", body: dict = None):
         return response.json()
 
 # ============================================================
-#  КОМАНДЫ БОТА (ПОТОМ)
+#  КОМАНДЫ БОТА
 # ============================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -104,13 +104,22 @@ async def numbers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка загрузки: {str(e)}")
 
 # ============================================================
-#  ИНИЦИАЛИЗАЦИЯ БОТА (ПОСЛЕ ОПРЕДЕЛЕНИЯ КОМАНД)
+#  ИНИЦИАЛИЗАЦИЯ БОТА
 # ============================================================
 bot_app = Application.builder().token(BOT_TOKEN).build()
 
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CommandHandler("help", help_command))
 bot_app.add_handler(CommandHandler("numbers", numbers_command))
+
+# ============================================================
+#  СОБЫТИЕ ПРИ ЗАПУСКЕ - ИНИЦИАЛИЗАЦИЯ БОТА
+# ============================================================
+@app.on_event("startup")
+async def startup_event():
+    """Инициализируем бота при старте сервера"""
+    await bot_app.initialize()
+    print("✅ Бот инициализирован")
 
 # ============================================================
 #  ВЕБХУК
@@ -166,4 +175,4 @@ async def terminate_session(number: str):
 # ============================================================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
