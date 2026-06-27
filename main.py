@@ -1,132 +1,159 @@
 import os
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List
 from dotenv import load_dotenv
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 load_dotenv()
 
-app = FastAPI(title="Telegram Mini App Proxy API")
+app = FastAPI(title="Telegram Mini App + Bot API")
 
-# Разрешаем CORS для твоего мини-аппа
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://5bc3a350.krutoyrentnomerov.pages.dev",
-        "https://krutoyrentnomerov.pages.dev",
-        "*"  # Для теста, потом можно убрать
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 API_URL = os.getenv("API_URL", "https://extether.duckdns.org")
 API_TOKEN = os.getenv("API_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # Токен твоего бота
+
+# Инициализация бота
+bot_app = Application.builder().token(BOT_TOKEN).build()
 
 # ============================================================
-#  МОДЕЛИ
-# ============================================================
-class OrderRequest(BaseModel):
-    number: str
-    days: int = 1
-
-class NumberRequest(BaseModel):
-    number: str
-
-# ============================================================
-#  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+#  ФУНКЦИИ ДЛЯ API
 # ============================================================
 async def api_request(endpoint: str, method: str = "GET", body: dict = None):
-    """Универсальная функция для запросов к API"""
     url = f"{API_URL}{endpoint}"
-    headers = {
-        "Authorization": f"Bearer {API_TOKEN}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {API_TOKEN}"}
     
     async with httpx.AsyncClient(timeout=30.0) as client:
         if method == "GET":
             response = await client.get(url, headers=headers)
         elif method == "POST":
             response = await client.post(url, headers=headers, json=body)
-        elif method == "DELETE":
-            response = await client.delete(url, headers=headers)
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported method: {method}")
         
         if response.status_code != 200:
-            raise HTTPException(
-                status_code=response.status_code,
-                detail=f"API error: {response.text}"
-            )
-        
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return response.json()
 
 # ============================================================
-#  ЭНДПОИНТЫ
+#  КОМАНДЫ БОТА
 # ============================================================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Создаём кнопки
+    keyboard = [
+        [InlineKeyboardButton("📱 Арендовать номер", url="https://твой-сайт.pages.dev")],
+        [InlineKeyboardButton("📢 Наш телеграм канал", url="https://t.me/anonymenumberrent")],
+        [InlineKeyboardButton("🆘 Тех поддержка", url="https://t.me/anonrentsupport_bot")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "👋 Добро пожаловать в сервис аренды анонимных номеров!\n"
+        "Здесь хранится ключ к вашей анонимности.\n\n"
+        "Что вы можете сделать:\n"
+        "➡️ Арендовать номер - получите номер для регистрации или смены номера.\n\n"
+        "📌 Для навигации используйте меню ниже.",
+        reply_markup=reply_markup
+    )
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("📱 Арендовать номер", url="https://твой-сайт.pages.dev")],
+        [InlineKeyboardButton("📢 Наш телеграм канал", url="https://5bc3a350.krutoyrentnomerov.pages.dev")],
+        [InlineKeyboardButton("🆘 Тех поддержка", url="https://t.me/anonrentsupport_bot")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "📖 Доступные команды:\n\n"
+        "/start — Главное меню\n"
+        "/help — Помощь\n"
+        "/numbers — Список свободных номеров\n\n"
+        "Или используйте кнопки ниже:",
+        reply_markup=reply_markup
+    )
+
+async def numbers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("⏳ Загружаю список номеров...")
+    
+    try:
+        data = await api_request("/numbers")
+        if data and data.get("available"):
+            text = "📞 Свободные номера:\n\n"
+            for item in data["available"]:
+                price = item.get("price", 0)
+                text += f"➕ {item['number']} — {price} $\n"
+            
+            if data.get("rented"):
+                text += f"\n🔴 В аренде: {len(data['rented'])} номеров"
+            
+            keyboard = [
+                [InlineKeyboardButton("📱 Арендовать номер", url="https://твой-сайт.pages.dev")],
+                [InlineKeyboardButton("🆘 Тех поддержка", url="https://t.me/anonrentsupport_bot")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(text, reply_markup=reply_markup)
+        else:
+            await update.message.reply_text("❌ Нет свободных номеров.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка загрузки: {str(e)}")
+
+# ============================================================
+#  ВЕБХУК
+# ============================================================
+@app.post("/webhook")
+async def webhook(request: Request):
+    """Принимает обновления от Telegram"""
+    try:
+        data = await request.json()
+        update = Update.de_json(data, bot_app.bot)
+        await bot_app.process_update(update)
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        return {"status": "error", "detail": str(e)}
+
+@app.get("/webhook")
+async def webhook_get():
+    return {"status": "webhook endpoint"}
+
+# ============================================================
+#  ЭНДПОИНТЫ ДЛЯ МИНИ-АППА
+# ============================================================
 @app.get("/")
 async def root():
-    return {"message": "Telegram Mini App Proxy API", "status": "running"}
+    return {"message": "Telegram Mini App + Bot API", "status": "running"}
 
 @app.get("/api/numbers")
 async def get_numbers():
-    """Получить список всех номеров"""
     try:
         data = await api_request("/numbers")
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/number/{number}")
-async def get_number(number: str):
-    """Получить информацию о конкретном номере"""
-    try:
-        data = await api_request(f"/number/{number}")
-        return data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.post("/api/order")
-async def create_order(order: OrderRequest):
-    """Создать заказ (арендовать номер)"""
+async def create_order(order: dict):
     try:
-        data = await api_request(
-            "/order",
-            method="POST",
-            body={"number": order.number, "days": order.days}
-        )
-        return data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/number/{number}/codes")
-async def get_codes(number: str):
-    """Получить коды для номера"""
-    try:
-        data = await api_request(f"/number/{number}/codes", method="POST")
+        data = await api_request("/order", method="POST", body=order)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/number/{number}/terminate")
 async def terminate_session(number: str):
-    """Завершить сессию (освободить номер)"""
     try:
         data = await api_request(f"/number/{number}/terminate-sessions", method="POST")
-        return data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/me")
-async def get_me():
-    """Получить информацию о пользователе"""
-    try:
-        data = await api_request("/me")
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
